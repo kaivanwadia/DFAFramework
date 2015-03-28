@@ -1,0 +1,208 @@
+#ifndef CS380C_ASSIGNMENT3_DFAFRAMEWORK_H
+#define CS380C_ASSIGNMENT3_DFAFRAMEWORK_H
+
+#include <unordered_set>
+#include <unordered_map>
+#include "Meet.h"
+#include "Transfer.h"
+#include <llvm/IR/BasicBlock.h>
+#include <llvm/IR/Function.h>
+#include <llvm/IR/CFG.h>
+#include <queue>
+#include <stack>
+
+namespace cs380c
+{
+template <typename ElemType, typename Hasher = std::hash<ElemType>>
+class WorkList
+{
+private:
+	std::unordered_map<int, ElemType> list;
+	std::unordered_set<ElemType, Hasher> set;
+	int maxNumber;
+	bool topDown;
+public:
+	WorkList(int _maxNumber, bool _topDown) : maxNumber(_maxNumber), topDown(_topDown) {};
+
+	bool enqueue(ElemType elem, int priority)
+	{
+		if (!set.count(elem))
+		{
+			list[priority] = elem;
+			set.insert(elem);
+			return true;
+		}
+		else
+			return false;
+	}
+
+	ElemType dequeue()
+	{
+		assert(!list.empty() && "Trying to dequeue an empty queue!");
+		ElemType ret;
+		int begin = 0;
+		int end = maxNumber;
+		if (topDown)
+		{
+			for (int i = maxNumber-1; i >= 0; i--)
+			{
+				if (list.find(i) != list.end())
+				{
+					ret = list[i];
+					list.erase(i);
+					set.erase(ret);
+					break;
+				}
+			}
+		}
+		else
+		{
+			for (int i = 0; i < maxNumber; i++)
+			{
+				if (list.find(i) != list.end())
+				{
+					ret = list[i];
+					list.erase(i);
+					set.erase(ret);
+					break;
+				}
+			}
+		}
+		assert(ret != NULL && "ElemType ret is null");
+		return ret;
+	}
+
+	bool empty() const { return list.empty(); }
+	int size() const { return list.size(); }
+};
+
+// T is the type on which the analysis is being done. For example it can be done on Instructions, 
+// Expressions, Definitions etc
+template <typename T>
+class DFAFramework {
+private:
+	bool topDown;
+	using TempSet = std::vector<T>;
+	using DFAMap = std::unordered_map<const llvm::BasicBlock*, TempSet>;
+	using OrderMap = std::unordered_map<llvm::BasicBlock*, int>;
+	DFAMap inMap, outMap;
+	Meet<T>* meet;
+	Transfer<T>* transfer;
+	TempSet initialSet;
+	OrderMap postOrderMap;
+
+public:
+	DFAFramework() {}
+	DFAFramework(bool _topDown, Meet<T>* _meet, Transfer<T>* _transfer) {
+		topDown = _topDown;
+		inMap = DFAMap();
+		outMap = DFAMap();
+		meet = _meet;
+		transfer = _transfer;
+		initialSet = TempSet();
+		postOrderMap = std::unordered_map<llvm::BasicBlock*, int>();
+	}
+
+	void computePostOrder(llvm::Function& f)
+	{
+		OrderMap statusMap;
+		for (auto& bb : f)
+		{
+			statusMap[&bb] = 0;
+		}
+		int orderNo = 0;
+		std::stack<llvm::BasicBlock*> bbStack;
+		bbStack.push(&f.getEntryBlock());
+		statusMap[&f.getEntryBlock()] = 1;
+		while(!bbStack.empty())
+		{
+			llvm::BasicBlock* currBB = bbStack.top();
+			bool pushed = false;
+			for (auto itr = succ_begin(currBB); itr != succ_end(currBB); ++itr)
+			{
+				if (statusMap[*itr] == 0)
+				{
+					pushed = true;
+					statusMap[*itr] = 1;
+					bbStack.push(*itr);
+				}
+			}
+			if (!pushed)
+			{
+				bbStack.pop();
+				statusMap[currBB] = 2;
+				postOrderMap[currBB] = orderNo;
+				orderNo++;
+			}
+		}
+	}
+
+	void doDFA(llvm::Function& f)
+	{
+		// printf("In doDFA\n");
+		computePostOrder(f);
+		WorkList<llvm::BasicBlock*> workList = WorkList<llvm::BasicBlock*>(postOrderMap.size(), topDown);
+		llvm::BasicBlock* bb;
+		// Setting up initial basic block
+		if (topDown)
+		{
+			bb = &(f.front());
+			this->inMap.insert(std::make_pair(bb, this->initialSet));
+		}
+		else
+		{
+			bb = &(f.back());
+			this->outMap.insert(std::make_pair(bb, this->initialSet));
+		}
+		workList.enqueue(bb, postOrderMap[bb]);
+		bool first = true;
+		// Start iterating over the worklist till empty
+		while (!workList.empty())
+		{
+			auto currBB = workList.dequeue();
+			bool meetChangedValue = this->meet->doMeet(currBB, this->inMap, this->outMap);
+			if (!meetChangedValue && !first)
+			{
+				continue;
+			}
+			first = false;
+			bool transferChangedValue = this->transfer->doTransfer(currBB, this->inMap, this->outMap);
+			this->addToWorklist(currBB, workList);
+		}
+	}
+
+	template <typename WorkListType>
+	void addToWorklist(llvm::BasicBlock* currBB, WorkListType& workList)
+	{
+		if (this->topDown)
+		{
+			for (auto itr = succ_begin(currBB); itr != succ_end(currBB); ++itr)
+			{
+				bool pushed = workList.enqueue(*itr, postOrderMap[*itr]);
+			}
+		}
+		else
+		{
+			for (auto itr = pred_begin(currBB); itr != pred_end(currBB); ++itr)
+			{
+				workList.enqueue(*itr, postOrderMap[*itr]);
+			}
+		}
+		return;
+	}
+
+	void setInitialValues(TempSet _initialSet)
+	{
+		initialSet = _initialSet;
+	}
+
+	const TempSet& getInValues(const llvm::BasicBlock* bb) const {
+		return inMap.at(bb);
+	}
+	const TempSet& getOutValues(const llvm::BasicBlock* bb) const {
+		return outMap.at(bb);
+	}
+};
+}
+
+#endif

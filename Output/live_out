@@ -1,0 +1,31 @@
+******  DataFlow Result for function sum  ******
+{ a b }
+bb:
+  br label %bb1
+{ a b }
+---
+{ tmp5 a b tmp3 }
+bb1:                                              ; preds = %bb4, %bb
+  %i.0 = phi i32 [ %a, %bb ], [ %tmp5, %bb4 ]
+  %res.0 = phi i32 [ 1, %bb ], [ %tmp3, %bb4 ]
+  %tmp = icmp slt i32 %i.0, %b
+  br i1 %tmp, label %bb2, label %bb6
+{ res.0 b i.0 }
+---
+{ res.0 b i.0 }
+bb2:                                              ; preds = %bb1
+  %tmp3 = mul nsw i32 %res.0, %i.0
+  br label %bb4
+{ b tmp3 i.0 }
+---
+{ b tmp3 i.0 }
+bb4:                                              ; preds = %bb2
+  %tmp5 = add nsw i32 %i.0, 1
+  br label %bb1
+{ tmp5 b tmp3 }
+---
+{ res.0 }
+bb6:                                              ; preds = %bb1
+  ret i32 %res.0
+{ }
+---
