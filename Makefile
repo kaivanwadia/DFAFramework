@@ -10,6 +10,8 @@ ReachingDef.o: ReachingDef.cpp ReachingDef.h DFAFramework.h Makefile
 	$(CXX) $(CXXFLAGS) ReachingDef.cpp -c -o $@
 DFAFramework.o: DFAFramework.h Makefile
 	$(CXX) $(CXXFLAGS) DFAFramework.h -c -o $@
+Worklist.o: Worklist.h Makefile
+	$(CXX) $(CXXFLAGS) Worklist.h -c -o $@
 Meet.o: Meet.h Makefile
 	$(CXX) $(CXXFLAGS) Meet.h -c -o $@
 Transfer.o: Transfer.h Makefile
