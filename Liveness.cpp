@@ -1,4 +1,6 @@
 #include "Liveness.h"
+#include "Hasher.h"
+#include "Equal.h"
 
 #include <llvm/IR/Function.h>
 #include <llvm/Support/raw_ostream.h>
@@ -12,7 +14,7 @@ using namespace std;
 
 bool LivenessAnalysis::runOnFunction(Function& f)
 {
-	vector<StringRef> initialSet;
+	std::unordered_set<StringRef, StringRefHash, StringRefEqual> initialSet;
 	dfa->setInitialValues(initialSet);
 	dfa->doDFA(f);
 	DataFlowAnnotator<LivenessAnalysis> annotator(*this, errs());

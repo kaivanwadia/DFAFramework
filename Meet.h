@@ -6,6 +6,8 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/IR/Instructions.h>
 #include "DFAFramework.h"
+#include "Hasher.h"
+#include "Equal.h"
 #include <unordered_set>
 #include <unordered_map>
 
@@ -13,25 +15,24 @@ using namespace llvm;
 
 namespace cs380c
 {
-template<typename T>
+template<typename T, typename HasherType, typename EqualType>
 class Meet
 {
 private:
-
+	// using TypeSet = std::unordered_set<T, HasherType, EqualType>;
+	// using DFAMap = std::unordered_map<const llvm::BasicBlock*, TypeSet>;
 public:
 	Meet() {}
 	// Does the Meet operation on a BasicBlock. Returns an unordered set of the meet result.
-	virtual bool doMeet(const llvm::BasicBlock* bb, std::unordered_map<const llvm::BasicBlock*, std::vector<T>>& inMap, std::unordered_map<const llvm::BasicBlock*, std::vector<T>>& outMap) = 0;
-	virtual bool checkAndInsert(std::vector<T>& vec, T elem) = 0;
-	virtual int findInVector(std::vector<T> vec, T elem) = 0;
+	virtual bool doMeet(const llvm::BasicBlock* bb, std::unordered_map<const llvm::BasicBlock*, std::unordered_set<T, HasherType, EqualType>>& inMap, std::unordered_map<const llvm::BasicBlock*, std::unordered_set<T, HasherType, EqualType>>& outMap) = 0;
 };
 
-class LivenessMeet: public Meet<llvm::StringRef>
+class LivenessMeet: public Meet<llvm::StringRef, StringRefHash, StringRefEqual>
 {
 private:
 public:
-	LivenessMeet() : Meet<llvm::StringRef>() {}
-	bool doMeet(const llvm::BasicBlock* bb, std::unordered_map<const llvm::BasicBlock*, std::vector<llvm::StringRef>>& inMap, std::unordered_map<const llvm::BasicBlock*, std::vector<llvm::StringRef>>& outMap)
+	LivenessMeet() : Meet<llvm::StringRef, StringRefHash, StringRefEqual>() {}
+	bool doMeet(const llvm::BasicBlock* bb, std::unordered_map<const llvm::BasicBlock*, std::unordered_set<llvm::StringRef, StringRefHash, StringRefEqual>>& inMap, std::unordered_map<const llvm::BasicBlock*, std::unordered_set<llvm::StringRef, StringRefHash, StringRefEqual>>& outMap)
 	{
 		// printf("In doMeet of LivenessMeet\n");
 		bool updated = false;
@@ -39,12 +40,12 @@ public:
 		if (itr == outMap.end())
 		{
 			updated = true;
-			itr = outMap.insert(std::make_pair(bb, std::vector<llvm::StringRef>())).first;
+			itr = outMap.insert(std::make_pair(bb, std::unordered_set<llvm::StringRef, StringRefHash, StringRefEqual>())).first;
 		}
 		auto& bbVariables = itr->second;
 		for (auto itr = succ_begin(bb); itr != succ_end(bb); ++itr)
 		{
-			std::vector<llvm::StringRef> otherPHIValues;
+			std::unordered_set<llvm::StringRef, StringRefHash, StringRefEqual> otherPHIValues;
 			for (auto& inst : (*(*itr)))
 			{
 				if (llvm::isa<llvm::PHINode>(inst)) // Phi Instruction
@@ -54,7 +55,7 @@ public:
 					{
 						if (phiInst->getIncomingBlock(i)->getName().str() != (bb)->getName().str())
 						{
-							otherPHIValues.push_back(phiInst->getIncomingValue(i)->getName());
+							otherPHIValues.insert(phiInst->getIncomingValue(i)->getName());
 						}
 					}
 				}
@@ -66,53 +67,23 @@ public:
 			auto succVariables = inMap[*itr];
 			for (auto const variable : succVariables)
 			{
-				if (this->findInVector(otherPHIValues, variable) == -1)
+				if (otherPHIValues.count(variable) == 0)
 				{
-					updated |= this->checkAndInsert(bbVariables, variable);
+					updated |= bbVariables.insert(variable).second;
+					// updated |= this->checkAndInsert(bbVariables, variable);
 				}
 			}
 		}
 		return updated;
 	}
-
-	int findInVector(std::vector<llvm::StringRef> vec, llvm::StringRef elem)
-	{
-		int index = -1;
-		for (auto itr = vec.begin(); itr != vec.end(); ++itr)
-		{
-			if ((*itr).str().compare(elem.str()) == 0)
-			{
-				index = std::distance(vec.begin(), itr);
-				break;
-			}
-		}
-		return index;
-	}
-
-	bool checkAndInsert(std::vector<llvm::StringRef>& vec, llvm::StringRef elem)
-	{
-		bool present = false;
-		for (auto itr = vec.begin(); itr != vec.end(); ++itr)
-		{
-			if ((*itr).str().compare(elem.str()) == 0)
-			{
-				present = true;
-			}
-		}
-		if (present == false)
-		{
-			vec.push_back(elem);
-		}
-		return !present;
-	}
 };
 
-class RDefMeet: public Meet<llvm::StringRef>
+class RDefMeet: public Meet<llvm::StringRef, StringRefHash, StringRefEqual>
 {
 private:
 public:
-	RDefMeet() : Meet<llvm::StringRef>() {}
-	bool doMeet(const llvm::BasicBlock* bb, std::unordered_map<const llvm::BasicBlock*, std::vector<llvm::StringRef>>& inMap, std::unordered_map<const llvm::BasicBlock*, std::vector<llvm::StringRef>>& outMap)
+	RDefMeet() : Meet<llvm::StringRef, StringRefHash, StringRefEqual>() {}
+	bool doMeet(const llvm::BasicBlock* bb, std::unordered_map<const llvm::BasicBlock*, std::unordered_set<llvm::StringRef, StringRefHash, StringRefEqual>>& inMap, std::unordered_map<const llvm::BasicBlock*, std::unordered_set<llvm::StringRef, StringRefHash, StringRefEqual>>& outMap)
 	{
 		// printf("In doMeet of RDefMeet\n");
 		bool updated = false;
@@ -120,7 +91,7 @@ public:
 		if (itr == inMap.end())
 		{
 			updated = true;
-			itr = inMap.insert(std::make_pair(bb, std::vector<llvm::StringRef>())).first;
+			itr = inMap.insert(std::make_pair(bb, std::unordered_set<llvm::StringRef, StringRefHash, StringRefEqual>())).first;
 		}
 		auto& bbRDefs = itr->second;
 		for (auto itr = pred_begin(bb); itr != pred_end(bb); ++itr)
@@ -133,41 +104,10 @@ public:
 			auto predVariables = outMap[*itr];
 			for (auto const rDef : predVariables)
 			{
-				updated |= this->checkAndInsert(bbRDefs, rDef);
+				updated |= bbRDefs.insert(rDef).second;
 			}
 		}
 		return updated;
-	}
-
-	int findInVector(std::vector<llvm::StringRef> vec, llvm::StringRef elem)
-	{
-		int index = -1;
-		for (auto itr = vec.begin(); itr != vec.end(); ++itr)
-		{
-			if ((*itr).str().compare(elem.str()) == 0)
-			{
-				index = std::distance(vec.begin(), itr);
-				break;
-			}
-		}
-		return index;
-	}
-
-	bool checkAndInsert(std::vector<llvm::StringRef>& vec, llvm::StringRef elem)
-	{
-		bool present = false;
-		for (auto itr = vec.begin(); itr != vec.end(); ++itr)
-		{
-			if ((*itr).str().compare(elem.str()) == 0)
-			{
-				present = true;
-			}
-		}
-		if (present == false)
-		{
-			vec.push_back(elem);
-		}
-		return !present;
 	}
 };
 

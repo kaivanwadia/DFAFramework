@@ -6,6 +6,9 @@
 #include "llvm/IR/Instruction.h"
 #include "Meet.h"
 #include "Transfer.h"
+#include "Hasher.h"
+#include "Equal.h"
+#include <unordered_set>
 
 namespace cs380c
 {
@@ -15,17 +18,17 @@ class LivenessAnalysis: public llvm::FunctionPass
 private:
 public:
 	static char ID;
-	DFAFramework<llvm::StringRef>* dfa;
+	DFAFramework<llvm::StringRef, StringRefHash, StringRefEqual>* dfa;
 	LivenessAnalysis() : llvm::FunctionPass(ID) {
-		dfa = new DFAFramework<llvm::StringRef>(false, new LivenessMeet(), new LivenessTransfer());
+		dfa = new DFAFramework<llvm::StringRef, StringRefHash, StringRefEqual>(false, new LivenessMeet(), new LivenessTransfer());
 	}
 
 	bool runOnFunction(llvm::Function&);
 
-	const std::vector<llvm::StringRef>& getInValues(const llvm::BasicBlock* bb) const {
+	const std::unordered_set<llvm::StringRef, StringRefHash, StringRefEqual>& getInValues(const llvm::BasicBlock* bb) const {
 		return dfa->getInValues(bb);
 	}
-	const std::vector<llvm::StringRef>& getOutValues(const llvm::BasicBlock* bb) const {
+	const std::unordered_set<llvm::StringRef, StringRefHash, StringRefEqual>& getOutValues(const llvm::BasicBlock* bb) const {
 		return dfa->getOutValues(bb);
 	}
 

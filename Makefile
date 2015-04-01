@@ -16,6 +16,10 @@ Meet.o: Meet.h Makefile
 	$(CXX) $(CXXFLAGS) Meet.h -c -o $@
 Transfer.o: Transfer.h Makefile
 	$(CXX) $(CXXFLAGS) Transfer.h -c -o $@
+Hasher.o: Hasher.h Makefile
+	$(CXX) $(CXXFLAGS) Hasher.h -c -o $@
+Equal.o: Equal.h Makefile
+	$(CXX) $(CXXFLAGS) Equal.h -c -o $@
 
 live.so: Liveness.o
 	$(CXX) -shared $^ -o $@

@@ -1,4 +1,6 @@
 #include "ReachingDef.h"
+#include "Hasher.h"
+#include "Equal.h"
 
 #include <llvm/IR/Function.h>
 #include <llvm/Support/raw_ostream.h>
@@ -11,11 +13,13 @@ using namespace std;
 
 bool ReachingDefAnalysis::runOnFunction(Function& f)
 {
-	vector<StringRef> initialSet;
+	std::unordered_set<StringRef, StringRefHash, StringRefEqual> initialSet;
 	for (auto itr = f.getArgumentList().begin(); itr != f.getArgumentList().end(); ++itr)
 	{
-		initialSet.push_back((*itr).getName());
+		initialSet.insert((*itr).getName());
 	}
+	StringRefHash temp = StringRefHash();
+	StringRefEqual temp2 = StringRefEqual();
 	dfa->setInitialValues(initialSet);
 	dfa->doDFA(f);
 	DataFlowAnnotator<ReachingDefAnalysis> annotator(*this, errs());
