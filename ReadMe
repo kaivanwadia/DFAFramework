@@ -1,1 +1,10 @@
-Please run the -mergereturn pass before running any of my passes. Thank you
+Data Flow Analysis Framework
+==================================
+Kaivan Wadia
+---------------------------
+
+Developed a Dataflow analysis (DFA) Framework. Framework was developed using the composition architecture style.
+
+To use the framework one only needs to provide the initial set, direction of flow and the meet and transfer functions.
+
+If using a non-pointer type for the answer set then the hash and equal functions also need to be provided.
